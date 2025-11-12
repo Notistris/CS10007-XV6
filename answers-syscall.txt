@@ -1,0 +1,20 @@
+Câu 1: 
+- Dựa vào kết quả của backtrace, hàm đã gọi syscall là usertrap().
+
+Câu 2: 
+- Giá trị của p->trapframe->a7 là 0x7 (7 trong decimal), thể hiện SYS_exec.
+
+Câu 3:
+- Chế độ của CPU trước đó là usermode vì theo đặc tả của RISC-V thì bit 8 của sstatus = 0 thì là usermode.
+
+Câu 4:
+- Lệnh assembly: lw	a3,0(zero) # 0 <_entry-0x80000000>
+- Thanh ghi: a3
+
+Câu 5:
+- Kernel crash bởi vì ta đã bắt nó đọc dữ liệu từ bộ nhớ 0 (NULL pointer), theo hình 3-3 trong sách xv6 thì địa chỉ 0 không được ánh xạ trong không gian địa chỉ của kernel.
+- Khi CPU cố gắng truy cập địa chỉ không được ánh xạ, sẽ gây ra page fault.
+
+Câu 6:
+- Tên của binary đang chạy là initcode
+- Pid là 1

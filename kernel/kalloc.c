@@ -77,3 +77,19 @@ void* kalloc(void) {
 #endif
     return (void*) r;
 }
+
+// Hàm đếm số lượng byte trống
+uint64 free_memory(void) {
+    struct run* r;
+    uint64 free_bytes = 0;
+
+    acquire(&kmem.lock);
+    r = kmem.freelist;
+    while (r) {
+        free_bytes += PGSIZE;
+        r = r->next;
+    }
+    release(&kmem.lock);
+
+    return free_bytes;
+}
