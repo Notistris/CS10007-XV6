@@ -1,0 +1,11 @@
+1. Các thanh ghi chứa đối số cho hàm là từ thanh ghi a0 -> a7, thanh ghi chứa giá trị 13 ở trong main là thanh a2
+2. Lời gọi đến hàm f trong main: Không có lệnh gọi trực tiếp (jal hoặc jalr) đến f, hàm f đã bị inline vào main.
+   Giá trị f(8) + 1 được tính toán thành 8 + 3 + 1 = 12 được tải trực tiếp vào thành ghi a1 (li  a1,12).
+   Lời gọi đến hàm g trong hàm f: Cũng tương tự khi không có lệnh gọi đến g, trình biên dịch đã tự inline hàm g vào hàm f.
+   tại địa chỉ 0x14	(addiw	a0,a0,3).
+3. Địa chỉ của hàm printf: Trong main ta có dòng tại địa chỉ 0x30 (68c000ef    jal	6bc <printf>). 68c000ef là mã máy của lệnh jal, suy ra địa chỉ chương trình nhảy đến là địa chỉ của hàm printf = 0x6bc
+4. Giá trị của thanh ghi ra sau khi gọi hàm printf trong main là tại dòng lệnh tiếp theo: (4501  	li	a0,0)
+5. Output sau khi chạy đoạn code là: HE110 World
+   Nếu RISC-V được chạy theo big-endian thì phải thay đổi i = 0x726c6400 và không cần thay đổi giá trị 57616 vì giá trị này được in dưới dạng số nguyên, không liên quan gì đến thứ tự của byte.
+6. Vì chuỗi định đạng cần 2 đối số truyền vào '%d' nhưng ta chỉ truyền một đối số, theo call.asm, giá trị 3 được truyền vào thanh ghi a1 là một đối số duy nhất.
+   Thế nên giá trị được in ra sau 'y=' là một giá trị rác được lấy ngẫu nhiên từ stack hoặc từ thanh ghi a2.
