@@ -38,9 +38,16 @@ uint64 sys_sleep(void) {
     int n;
     uint ticks0;
 
+    // test panic
+    // uint64* p = 0;
+    // *p = 1;
+
     argint(0, &n);
     if (n < 0)
         n = 0;
+
+    backtrace();
+
     acquire(&tickslock);
     ticks0 = ticks;
     while (ticks - ticks0 < n) {
@@ -50,6 +57,7 @@ uint64 sys_sleep(void) {
         }
         sleep(&ticks, &tickslock);
     }
+
     release(&tickslock);
     return 0;
 }
