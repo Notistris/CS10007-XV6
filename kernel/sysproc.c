@@ -1,73 +1,128 @@
 #include "types.h"
 #include "riscv.h"
-#include "defs.h"
 #include "param.h"
+#include "defs.h"
 #include "memlayout.h"
 #include "spinlock.h"
 #include "proc.h"
 
-uint64 sys_exit(void) {
-    int n;
-    argint(0, &n);
-    exit(n);
-    return 0;  // not reached
+uint64
+sys_exit(void)
+{
+  int n;
+  argint(0, &n);
+  exit(n);
+  return 0;  // not reached
 }
 
-uint64 sys_getpid(void) { return myproc()->pid; }
-
-uint64 sys_fork(void) { return fork(); }
-
-uint64 sys_wait(void) {
-    uint64 p;
-    argaddr(0, &p);
-    return wait(p);
+uint64
+sys_getpid(void)
+{
+  return myproc()->pid;
 }
 
-uint64 sys_sbrk(void) {
-    uint64 addr;
-    int n;
-
-    argint(0, &n);
-    addr = myproc()->sz;
-    if (growproc(n) < 0)
-        return -1;
-    return addr;
+uint64
+sys_fork(void)
+{
+  return fork();
 }
 
-uint64 sys_sleep(void) {
-    int n;
-    uint ticks0;
+uint64
+sys_wait(void)
+{
+  uint64 p;
+  argaddr(0, &p);
+  return wait(p);
+}
 
-    argint(0, &n);
-    if (n < 0)
-        n = 0;
-    acquire(&tickslock);
-    ticks0 = ticks;
-    while (ticks - ticks0 < n) {
-        if (killed(myproc())) {
-            release(&tickslock);
-            return -1;
-        }
-        sleep(&ticks, &tickslock);
+uint64
+sys_sbrk(void)
+{
+  uint64 addr;
+  int n;
+
+  argint(0, &n);
+  addr = myproc()->sz;
+  if(growproc(n) < 0)
+    return -1;
+  return addr;
+}
+
+uint64
+sys_sleep(void)
+{
+  int n;
+  uint ticks0;
+
+
+  argint(0, &n);
+  acquire(&tickslock);
+  ticks0 = ticks;
+  while(ticks - ticks0 < n){
+    if(killed(myproc())){
+      release(&tickslock);
+      return -1;
     }
-    release(&tickslock);
-    return 0;
+    sleep(&ticks, &tickslock);
+  }
+  release(&tickslock);
+  return 0;
 }
 
-uint64 sys_kill(void) {
-    int pid;
 
-    argint(0, &pid);
-    return kill(pid);
+int
+sys_pgaccess(void)
+{
+  uint64 va;          // Địa chỉ ảo bắt đầu
+  int npages;         // Số lượng trang cần kiểm tra
+  uint64 user_mask_addr; // Địa chỉ buffer bitmask phía user
+  uint64 mask = 0;    // Bitmask kết quả
+  struct proc *p = myproc();
+
+  // Lấy tham số từ user space
+  argaddr(0, &va);
+  argint(1, &npages);
+  argaddr(2, &user_mask_addr);
+  
+  // Duyệt qua từng trang
+  for(int i = 0; i < npages; i++) {
+    uint64 current_va = va + i * PGSIZE;
+    
+    // Tìm PTE tương ứng bằng hàm walk()
+    pte_t *pte = walk(p->pagetable, current_va, 0);
+
+    // Kiểm tra PTE hợp lệ và bit PTE_A
+    if(pte != 0 && (*pte & PTE_V) && (*pte & PTE_A)) {
+      mask |= (1L << i);
+      *pte &= ~PTE_A;
+    }
+  }
+
+  // Sao chép bitmask kết quả về user space
+  if(copyout(p->pagetable, user_mask_addr, (char *)&mask, sizeof(mask)) < 0)
+    return -1;
+
+  return 0;
+}
+
+uint64
+sys_kill(void)
+{
+  int pid;
+
+  argint(0, &pid);
+  return kill(pid);
 }
 
 // return how many clock tick interrupts have occurred
 // since start.
-uint64 sys_uptime(void) {
-    uint xticks;
+uint64
+sys_uptime(void)
+{
+  uint xticks;
 
-    acquire(&tickslock);
-    xticks = ticks;
-    release(&tickslock);
-    return xticks;
+  acquire(&tickslock);
+  xticks = ticks;
+  release(&tickslock);
+  return xticks;
 }
