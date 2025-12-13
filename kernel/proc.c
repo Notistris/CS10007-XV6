@@ -118,6 +118,15 @@ found:
         return 0;
     }
 
+    // Allocate usyscall page.
+    if ((p->usyscall = (struct usyscall*) kalloc()) == 0) {
+        freeproc(p);
+        release(&p->lock);
+        return 0;
+    }
+
+    p->usyscall->pid = p->pid;
+
     // An empty user page table.
     p->pagetable = proc_pagetable(p);
     if (p->pagetable == 0) {
@@ -142,6 +151,9 @@ static void freeproc(struct proc* p) {
     if (p->trapframe)
         kfree((void*) p->trapframe);
     p->trapframe = 0;
+    if (p->usyscall)
+        kfree((void*) p->usyscall);
+    p->usyscall = 0;
     if (p->pagetable)
         proc_freepagetable(p->pagetable, p->sz);
     p->pagetable = 0;
@@ -182,6 +194,13 @@ pagetable_t proc_pagetable(struct proc* p) {
         return 0;
     }
 
+    if (mappages(pagetable, USYSCALL, PGSIZE, (uint64) (p->usyscall), PTE_R | PTE_U) < 0) {
+        uvmunmap(pagetable, TRAMPOLINE, 1, 0);
+        uvmunmap(pagetable, TRAPFRAME, 1, 0);
+        uvmfree(pagetable, 0);
+        return 0;
+    }
+
     return pagetable;
 }
 
@@ -190,6 +209,7 @@ pagetable_t proc_pagetable(struct proc* p) {
 void proc_freepagetable(pagetable_t pagetable, uint64 sz) {
     uvmunmap(pagetable, TRAMPOLINE, 1, 0);
     uvmunmap(pagetable, TRAPFRAME, 1, 0);
+    uvmunmap(pagetable, USYSCALL, 1, 0);
     uvmfree(pagetable, sz);
 }
 
@@ -413,6 +433,7 @@ void scheduler(void) {
         // processes are waiting.
         intr_on();
 
+        int found = 0;
         for (p = proc; p < &proc[NPROC]; p++) {
             acquire(&p->lock);
             if (p->state == RUNNABLE) {
@@ -426,8 +447,14 @@ void scheduler(void) {
                 // Process is done running for now.
                 // It should have changed its p->state before coming back.
                 c->proc = 0;
+                found = 1;
             }
             release(&p->lock);
+        }
+        if (found == 0) {
+            // nothing to run; stop running on this core until an interrupt.
+            intr_on();
+            asm volatile("wfi");
         }
     }
 }
