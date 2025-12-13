@@ -58,8 +58,8 @@ void usertrap(void) {
     } else if ((which_dev = devintr()) != 0) {
         // ok
     } else {
-        printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
-        printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
+        printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
+        printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
         setkilled(p);
     }
 
@@ -131,13 +131,13 @@ void kerneltrap() {
         panic("kerneltrap: interrupts enabled");
 
     if ((which_dev = devintr()) == 0) {
-        // interrupt or trap from an unknown source
-        printf("scause=0x%lx sepc=0x%lx stval=0x%lx\n", scause, r_sepc(), r_stval());
+        printf("scause %p\n", scause);
+        printf("sepc=%p stval=%p\n", r_sepc(), r_stval());
         panic("kerneltrap");
     }
 
     // give up the CPU if this is a timer interrupt.
-    if (which_dev == 2 && myproc() != 0)
+    if (which_dev == 2 && myproc() != 0 && myproc()->state == RUNNING)
         yield();
 
     // the yield() may have caused some traps to occur,
@@ -147,17 +147,10 @@ void kerneltrap() {
 }
 
 void clockintr() {
-    if (cpuid() == 0) {
-        acquire(&tickslock);
-        ticks++;
-        wakeup(&ticks);
-        release(&tickslock);
-    }
-
-    // ask for the next timer interrupt. this also clears
-    // the interrupt request. 1000000 is about a tenth
-    // of a second.
-    w_stimecmp(r_time() + 1000000);
+    acquire(&tickslock);
+    ticks++;
+    wakeup(&ticks);
+    release(&tickslock);
 }
 
 // check if it's an external interrupt or software interrupt,
@@ -168,7 +161,7 @@ void clockintr() {
 int devintr() {
     uint64 scause = r_scause();
 
-    if (scause == 0x8000000000000009L) {
+    if ((scause & 0x8000000000000000L) && (scause & 0xff) == 9) {
         // this is a supervisor external interrupt, via PLIC.
 
         // irq indicates which device interrupted.
@@ -189,9 +182,18 @@ int devintr() {
             plic_complete(irq);
 
         return 1;
-    } else if (scause == 0x8000000000000005L) {
-        // timer interrupt.
-        clockintr();
+    } else if (scause == 0x8000000000000001L) {
+        // software interrupt from a machine-mode timer interrupt,
+        // forwarded by timervec in kernelvec.S.
+
+        if (cpuid() == 0) {
+            clockintr();
+        }
+
+        // acknowledge the software interrupt by clearing
+        // the SSIP bit in sip.
+        w_sip(r_sip() & ~2);
+
         return 2;
     } else {
         return 0;

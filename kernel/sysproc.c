@@ -39,8 +39,6 @@ uint64 sys_sleep(void) {
     uint ticks0;
 
     argint(0, &n);
-    if (n < 0)
-        n = 0;
     acquire(&tickslock);
     ticks0 = ticks;
     while (ticks - ticks0 < n) {
@@ -55,26 +53,8 @@ uint64 sys_sleep(void) {
 }
 
 #ifdef LAB_PGTBL
-int sys_pgpte(void) {
-    uint64 va;
-    struct proc* p;
-
-    p = myproc();
-    argaddr(0, &va);
-    pte_t* pte = pgpte(p->pagetable, va);
-    if (pte != 0) {
-        return (uint64) *pte;
-    }
-    return 0;
-}
-#endif
-
-#ifdef LAB_PGTBL
-int sys_kpgtbl(void) {
-    struct proc* p;
-
-    p = myproc();
-    vmprint(p->pagetable);
+int sys_pgaccess(void) {
+    // lab pgtbl: your code here.
     return 0;
 }
 #endif
