@@ -388,6 +388,51 @@ static uint bmap(struct inode* ip, uint bn) {
         return addr;
     }
 
+    bn -= NINDIRECT;
+
+    // Kiểm tra xem bn có nằm trong phạm vi của gián tiếp đôi không (256 * 256)
+    if (bn < NINDIRECT * NINDIRECT) {
+        // Load khối gián tiếp đôi
+        if ((addr = ip->addrs[NDIRECT + 1]) == 0) {
+            addr = balloc(ip->dev);
+            if (addr == 0)
+                return 0;
+            ip->addrs[NDIRECT + 1] = addr;
+        }
+        bp = bread(ip->dev, addr);
+        a = (uint*) bp->data;
+
+        // Tính index trong khối Level 2
+        uint index_lvl2 = bn / NINDIRECT;
+        if ((addr = a[index_lvl2]) == 0) {
+            // Cấp phát khối Level 1 (Singly-indirect) mới nếu chưa có
+            addr = balloc(ip->dev);
+            if (addr == 0) {
+                brelse(bp);  // Giải phóng buffer trước khi return
+                return 0;
+            }
+            a[index_lvl2] = addr;
+            log_write(bp);
+        }
+        brelse(bp);  // Xong việc với khối Level 2, giải phóng nó
+
+        bp = bread(ip->dev, addr);
+        a = (uint*) bp->data;
+
+        // Tính index trong khối Level 1
+        uint index_lvl1 = bn % NINDIRECT;
+        if ((addr = a[index_lvl1]) == 0) {
+            // Cấp phát khối dữ liệu thực sự
+            addr = balloc(ip->dev);
+            if (addr) {
+                a[index_lvl1] = addr;
+                log_write(bp);
+            }
+        }
+        brelse(bp);  // Giải phóng khối Level 1
+        return addr;
+    }
+
     panic("bmap: out of range");
 }
 
@@ -415,6 +460,28 @@ void itrunc(struct inode* ip) {
         brelse(bp);
         bfree(ip->dev, ip->addrs[NDIRECT]);
         ip->addrs[NDIRECT] = 0;
+    }
+
+    if (ip->addrs[NDIRECT + 1]) {
+        bp = bread(ip->dev, ip->addrs[NDIRECT + 1]);
+        a = (uint*) bp->data;
+
+        for (j = 0; j < NINDIRECT; j++) {
+            if (a[j]) {
+                struct buf* bp2 = bread(ip->dev, a[j]);
+                uint* a2 = (uint*) bp2->data;
+
+                for (int k = 0; k < NINDIRECT; k++) {
+                    if (a2[k])
+                        bfree(ip->dev, a2[k]);
+                }
+                brelse(bp2);
+                bfree(ip->dev, a[j]);
+            }
+        }
+        brelse(bp);
+        bfree(ip->dev, ip->addrs[NDIRECT + 1]);
+        ip->addrs[NDIRECT + 1] = 0;
     }
 
     ip->size = 0;
